@@ -114,7 +114,15 @@ class General(commands.Cog):
         categories = {}
 
         # Scan all commands and group them by binding (Cog)
-        for command in self.bot.tree.walk_commands():
+        tree_commands = []
+        if interaction.guild:
+            tree_commands = list(self.bot.tree.walk_commands(guild=interaction.guild))
+        
+        # Fallback to global if guild commands return empty
+        if not tree_commands:
+            tree_commands = list(self.bot.tree.walk_commands())
+            
+        for command in tree_commands:
             if isinstance(command, app_commands.Command):
                 cog_name = "General"
                 if command.binding:
