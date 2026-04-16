@@ -50,22 +50,26 @@ class UrbexBot(commands.Bot):
 
         # Sync Slash Commands
         try:
-            guild_id = os.getenv('GUILD_ID')
-            if guild_id and guild_id.strip():
-                try:
-                    guild = discord.Object(id=int(guild_id))
-                    self.tree.clear_commands(guild=guild)
-                    self.tree.copy_global_to(guild=guild)
-                    # Remove stale global commands to prevent guild/global duplicates.
-                    self.tree.clear_commands(guild=None)
-                    await self.tree.sync()
-                    synced = await self.tree.sync(guild=guild)
-                    logger.info(f'Synced {len(synced)} commands to Guild ID: {guild_id}')
-                except ValueError:
-                    logger.warning(f"Invalid GUILD_ID: '{guild_id}'. Syncing globally...")
-                    synced = await self.tree.sync()
-                    logger.info(f'Synced {len(synced)} commands globally.')
+            guild_id_str = os.getenv('GUILD_ID')
+            if guild_id_str and guild_id_str.strip():
+                guild_ids = [g.strip() for g in guild_id_str.split(',') if g.strip()]
+                for g_id in guild_ids:
+                    try:
+                        guild = discord.Object(id=int(g_id))
+                        # We copy the un-bound core commands specifically to this guild
+                        self.tree.copy_global_to(guild=guild)
+                        synced = await self.tree.sync(guild=guild)
+                        logger.info(f'Synced {len(synced)} commands to Guild ID: {g_id}')
+                    except ValueError:
+                        logger.warning(f"Invalid GUILD_ID: '{g_id}'. Skipping...")
+                
+                # Remove stale global commands to prevent ghost duplicate commands
+                # MUST be done after copying to all guilds, otherwise tree memory is wiped before copy
+                self.tree.clear_commands(guild=None)
+                await self.tree.sync(guild=None)
+                
             else:
+                # If no GUILD_ID is provided, sync globally (can take up to 1 hour to propagate)
                 synced = await self.tree.sync()
                 logger.info(f'Synced {len(synced)} commands globally.')
         except Exception as e:
