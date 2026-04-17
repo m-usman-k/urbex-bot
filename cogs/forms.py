@@ -506,6 +506,8 @@ async def send_review_panel(channel: discord.TextChannel):
         "Laat een review achter 👇\n"
         "Klik op de knop hieronder en deel jouw ervaring met deze locatie.\n\n"
         "Je review wordt automatisch in dit kanaal geplaatst.\n\n"
+        "- Toegankelijkheid: (1⭐ = slecht toegankelijk, 5⭐ = goed toegankelijk)\n"
+        "- Kwaliteit: (1⭐ = slecht, 5⭐ = goed)\n\n"
         "👇 Klik hier om je review te plaatsen"
     )
     view = ReviewPanelView()
