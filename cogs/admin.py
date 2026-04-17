@@ -5,9 +5,9 @@ import aiosqlite
 import pandas as pd
 import io
 import sqlite3
-import sqlite3
 from utils.database import DB_PATH, update_user_balance, set_setting, get_setting
 from utils.logger import log_event
+from cogs.shop import send_shop_panel
 
 def create_setup_home_embed() -> discord.Embed:
     embed = discord.Embed(
@@ -583,12 +583,16 @@ class Admin(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def setup_shop_panel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
-        await interaction.response.defer(ephemeral=True)
         target_channel = channel or interaction.channel
-        await set_setting("shop_panel_channel", target_channel.id)
-        from cogs.shop import send_shop_panel
-        await send_shop_panel(target_channel)
-        await interaction.followup.send(f"Shop panel sent to {target_channel.mention}!", ephemeral=True)
+        # Respond immediately to prevent "Unknown Interaction" timeout
+        await interaction.response.send_message(f"Bezig met opzetten van het shop panel in {target_channel.mention}...", ephemeral=True)
+        
+        try:
+            await set_setting("shop_panel_channel", target_channel.id)
+            await send_shop_panel(target_channel)
+            await interaction.edit_original_response(content=f"✅ Shop panel succesvol opgezet in {target_channel.mention}!")
+        except Exception as e:
+            await interaction.edit_original_response(content=f"❌ Fout bij opzetten panel: {str(e)}")
 
     @app_commands.command(name="bot_setup_guide", description="Show complete admin setup and operation guide")
     @app_commands.default_permissions(administrator=True)

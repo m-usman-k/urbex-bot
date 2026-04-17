@@ -18,17 +18,38 @@ def is_shop_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
 
 
 def build_shop_panel_embed() -> discord.Embed:
+    import json
+    import os
+    rewards = []
+    if os.path.exists("rewards.json"):
+        with open("rewards.json", "r", encoding="utf-8") as f:
+            try:
+                rewards = json.load(f)
+            except:
+                pass
+    
     embed = discord.Embed(
         title="🏪 Urbex Shop",
-        description=(
-            "Gebruik je coins om exclusieve rewards te claimen.\n\n"
-            "💰 Check je saldo\n"
-            "🎁 Bekijk rewards\n"
-            "🎟️ Claim reward"
-        ),
-        color=discord.Color.from_rgb(43, 45, 49),
+        description="Welkom in de officiële community shop! Gebruik je verdiende coins om exclusieve rewards te claimen.",
+        color=discord.Color.from_rgb(43, 45, 49)
     )
-    embed.set_footer(text="The Urbex Factory")
+
+    if rewards:
+        # Sort rewards by price
+        rewards.sort(key=lambda x: x.get('price', 0))
+        rewards_list = ""
+        for item in rewards:
+            name = item.get("name", "Unknown")
+            price = item.get("price", 0)
+            rewards_list += f"**{name}**\n└ 💰 `{price} coins`\n\n"
+        
+        embed.add_field(name="🎁 Beschikbare Rewards", value=rewards_list if rewards_list else "Geen items gevonden.", inline=False)
+    else:
+        embed.add_field(name="🎁 Beschikbare Rewards", value="Er zijn momenteel geen items beschikbaar.", inline=False)
+
+    embed.add_field(name="❓ Hoe te claimen?", value="Kies **'Claim reward'** in het menu hieronder en selecteer het item dat je wilt hebben. De bot controleert automatisch of je genoeg coins hebt!", inline=False)
+    
+    embed.set_footer(text="The Urbex Factory | Gebruik /help voor meer informatie")
     return embed
 
 
@@ -162,6 +183,42 @@ class RewardSelectDropdown(ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         reward_selected = self.values[0]
+        
+        # 1. Fetch price from rewards.json
+        import json
+        import os
+        price = None
+        if os.path.exists("rewards.json"):
+            with open("rewards.json", "r", encoding="utf-8") as f:
+                try:
+                    for item in json.load(f):
+                        if item.get("name") == reward_selected:
+                            price = item.get("price")
+                            break
+                except:
+                    pass
+        
+        if price is None:
+            return await interaction.response.send_message("❌ Fout bij het laden van item data. Probeer het later opnieuw.", ephemeral=True)
+
+        # 2. Check balance
+        from utils.database import get_user_balance
+        user_balance = await get_user_balance(interaction.user.id)
+        
+        if user_balance < price:
+            embed = discord.Embed(
+                title="❌ Onvoldoende Saldo",
+                description=(
+                    f"Je hebt niet genoeg coins voor **{reward_selected}**.\n\n"
+                    f"**Prijs**: `{price} coins`\n"
+                    f"**Jouw saldo**: `{user_balance} coins`\n\n"
+                    f"Je hebt nog **`{price - user_balance}`** coins nodig!"
+                ),
+                color=discord.Color.red()
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        # 3. Create or get ticket
         ticket_channel, created = await create_or_get_shop_ticket(interaction)
         if not ticket_channel:
             return await interaction.response.send_message(
@@ -239,8 +296,7 @@ class ShopDropdown(ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="Check je saldo", emoji="💰", value="balance", description="Bekijk je huidige hoeveelheid coins."),
-            discord.SelectOption(label="Bekijk rewards", emoji="🎁", value="rewards", description="Bekijk alle beschikbare rewards in de shop."),
-            discord.SelectOption(label="Claim reward", emoji="🎟️", value="claim", description="Open een ticket om iets te claimen.")
+            discord.SelectOption(label="Claim reward", emoji="🎟️", value="claim", description="Selecteer een item om te claimen.")
         ]
         super().__init__(placeholder="Kies een actie...", min_values=1, max_values=1, options=options, custom_id="shop_panel_dropdown")
 
@@ -277,33 +333,6 @@ class ShopDropdown(ui.Select):
                 color=discord.Color.gold()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
-            
-        elif choice == "rewards":
-            import json
-            import os
-            items_str = ""
-            rewards_file = "rewards.json"
-            if os.path.exists(rewards_file):
-                with open(rewards_file, "r", encoding="utf-8") as f:
-                    try:
-                        rewards = json.load(f)
-                        for item in rewards:
-                            name = item.get("name", "Unknown")
-                            price = item.get("price", 0)
-                            items_str += f"**{name}** — `{price} coins`\n\n"
-                    except Exception:
-                        items_str = "Fout bij laden van rewards."
-                        
-            if not items_str:
-                items_str = "Er zijn momenteel geen rewards beschikbaar in de shop."
-                
-            embed = discord.Embed(
-                title="🎁 Beschikbare Rewards",
-                description=items_str,
-                color=discord.Color.purple()
-            )
-            
-            await interaction.followup.send(embed=embed, view=RewardsNavView(), ephemeral=True)
 
 class ShopPanelView(ui.View):
     def __init__(self):
