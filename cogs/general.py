@@ -11,8 +11,8 @@ class HelpDropdown(ui.Select):
         self.categories = categories
         options = [
             discord.SelectOption(label="Home", description="Back to the landing page", emoji="🏠"),
-            discord.SelectOption(label="Earnings", description="How to earn coins & XP", emoji="🪙"),
-            discord.SelectOption(label="Economy", description="Coins, XP, and Leaderboards", emoji="💰"),
+            discord.SelectOption(label="Earnings", description="How to earn coins", emoji="🪙"),
+            discord.SelectOption(label="Economy", description="Coins and Leaderboards", emoji="💰"),
             discord.SelectOption(label="Submissions", description="Submit reviews and updates", emoji="📝"),
             discord.SelectOption(label="Shop", description="Open manual claim tickets", emoji="🛒"),
             discord.SelectOption(label="Boosters", description="Server boosting utilities", emoji="🚀"),
@@ -46,7 +46,7 @@ class HelpDropdown(ui.Select):
             embed.add_field(name="⭐ Reviews", value=f"Verdien **{review} coins** per goedgekeurde review.", inline=False)
             embed.add_field(name="📍 Updates", value=f"Verdien **{update} coins** voor elke goedgekeurde locatie update.", inline=False)
             embed.add_field(name="🚀 Server Boosting", value=f"Verdien **{boost_init} coins** bij het starten van een boost en **{boost_month} coins** per maand!", inline=False)
-            embed.add_field(name="✨ Activiteit", value=f"Verdien **{act_coins} coins** en **{act_xp} XP** per **{act_int} minuten** door actief te zijn in de chat!", inline=False)
+            embed.add_field(name="✨ Activiteit", value=f"\nVerdien **{act_coins} coins** per **{act_int} minuten** door actief te zijn in de chat!", inline=False)
             
             embed.set_footer(text="The Urbex Factory | Economy System", icon_url=self.bot.user.display_avatar.url)
             return await interaction.response.edit_message(embed=embed, view=self.view)
@@ -87,7 +87,7 @@ def create_main_help_embed(bot):
         description=(
             "Welcome to the **Urbex Factory** official bot. Use the dropdown below to explore our features!\n\n"
             "**Earnings**: Hoe je coins kunt verdienen in de community. 🪙\n"
-            "**Economy**: Earn coins, level up, and compete on the leaderboard.\n"
+            "**Economy**: Earn coins and compete on the leaderboard.\n"
             "**Submissions**: High-fidelity reviews and updates with native image grids.\n"
             "**Shop**: Open a manual claim ticket with staff.\n"
             "**Admin**: Tools for server staff to manage the bot.\n\n"

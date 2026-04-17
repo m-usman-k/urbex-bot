@@ -185,15 +185,12 @@ class SubmissionApprovalView(ui.LayoutView):
         
         await interaction.followup.edit_message(interaction.message.id, view=view)
 
-        xp_gain = 50 if sub_type == 'review' else 20
-        await add_xp(user_id, xp_gain)
-
         # Notify User
         if user:
             try:
                 msg = (
                     f"✅ Je {sub_type} voor **{location_id}** is goedgekeurd!\n"
-                    f"Je hebt **{reward_amt} coins** en **{xp_gain} XP** ontvangen.\n"
+                    f"Je hebt **{reward_amt} coins** ontvangen.\n"
                     f"Nieuw saldo: **{new_balance}** coins."
                 )
                 await user.send(msg)

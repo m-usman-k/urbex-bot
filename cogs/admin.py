@@ -285,17 +285,15 @@ class Admin(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def user_info(self, interaction: discord.Interaction, member: discord.Member):
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute("SELECT balance, level, xp, total_earned FROM users WHERE user_id = ?", (member.id,)) as cursor:
+            async with db.execute("SELECT balance, total_earned FROM users WHERE user_id = ?", (member.id,)) as cursor:
                 row = await cursor.fetchone()
         
         if not row:
             return await interaction.response.send_message("User not found in database.", ephemeral=True)
 
-        balance, level, xp, total_earned = row
+        balance, total_earned = row
         embed = discord.Embed(title=f"User Info: {member.display_name}", color=discord.Color.blue())
         embed.add_field(name="Balance", value=f"{balance} coins", inline=True)
-        embed.add_field(name="Level", value=f"{level}", inline=True)
-        embed.add_field(name="XP", value=f"{xp}", inline=True)
         embed.add_field(name="Total Earned", value=f"{total_earned}", inline=True)
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -356,12 +354,25 @@ class Admin(commands.Cog):
                 
                 df_inventory = pd.read_sql_query("SELECT * FROM inventory", conn)
                 df_inventory = format_ids_and_names(df_inventory)
+                # Cleanup headers for Excel
+                df_inventory.columns = [c.replace('_', ' ').capitalize() for c in df_inventory.columns]
                 df_inventory.to_excel(writer, sheet_name='User Inventory', index=False)
                 
                 # 4. Transactions
                 df_tx = pd.read_sql_query("SELECT * FROM transactions", conn)
                 df_tx = format_ids_and_names(df_tx)
+                df_tx.columns = [c.replace('_', ' ').capitalize() for c in df_tx.columns]
                 df_tx.to_excel(writer, sheet_name='Transaction History', index=False)
+
+                # 5. Activity Logs (Audit)
+                df_audit = pd.read_sql_query("SELECT * FROM activity_logs", conn)
+                df_audit.columns = [c.replace('_', ' ').capitalize() for c in df_audit.columns]
+                df_audit.to_excel(writer, sheet_name='Activity Audit', index=False)
+
+                # 6. Settings
+                df_settings = pd.read_sql_query("SELECT * FROM settings", conn)
+                df_settings.columns = [c.replace('_', ' ').capitalize() for c in df_settings.columns]
+                df_settings.to_excel(writer, sheet_name='System Settings', index=False)
             
             conn.close()
             output.seek(0)

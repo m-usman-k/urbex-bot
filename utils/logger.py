@@ -1,5 +1,6 @@
 import discord
-from utils.database import get_setting
+import aiosqlite
+from utils.database import get_setting, DB_PATH
 import logging
 
 logger = logging.getLogger('bot_logger')
@@ -24,6 +25,15 @@ async def log_event(bot, log_type, title, description, color=discord.Color.blue(
         return
 
     try:
+        # Save to Database
+        async with aiosqlite.connect(DB_PATH) as db:
+            c_val = color.value if hasattr(color, 'value') else int(color)
+            await db.execute(
+                "INSERT INTO activity_logs (log_type, title, description, color) VALUES (?, ?, ?, ?)",
+                (log_type, title, description, c_val)
+            )
+            await db.commit()
+
         channel = bot.get_channel(int(channel_id))
         if not channel:
             channel = await bot.fetch_channel(int(channel_id))

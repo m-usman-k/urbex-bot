@@ -103,7 +103,6 @@ class Economy(commands.Cog):
                     return
 
             await update_user_balance(message.author.id, coins_reward, f"Activiteit beloning ({interval} min)")
-            await add_xp(message.author.id, xp_reward)
             await db.execute(
                 "UPDATE users SET last_message_reward = ? WHERE user_id = ?",
                 (now.isoformat(), message.author.id),
@@ -125,14 +124,6 @@ class Economy(commands.Cog):
         embed = discord.Embed(title=f"Profiel van {member.display_name}", color=discord.Color.blue())
         embed.set_thumbnail(url=member.display_avatar.url)
         
-        current_level = stats['level']
-        current_xp = stats['xp']
-        xp_needed = (current_level * 100) + 50
-        xp_percent = min(100, int((current_xp / xp_needed) * 100))
-        filled = xp_percent // 10
-        progress_bar = "[" + "=" * filled + "-" * (10 - filled) + "]"
-        
-        embed.add_field(name="Level & XP", value=f"**Level `{current_level}`**\n`{current_xp}/{xp_needed}` XP\n`{progress_bar}`", inline=False)
         embed.add_field(name="Wallet", value=f"**`{stats['balance']}`** Coins", inline=True)
         embed.add_field(name="Totaal verdiend", value=f"**`{stats['total_earned']}`** Coins", inline=True)
         embed.add_field(name="Goedgekeurde inzendingen", value=f"**`{stats['submissions']}`**", inline=True)
@@ -194,25 +185,15 @@ class Economy(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="leaderboard", description="Bekijk de top verdieners")
-    @app_commands.choices(category=[
-        app_commands.Choice(name="Coins", value="balance"),
-        app_commands.Choice(name="XP", value="level")
-    ])
-    async def leaderboard(self, interaction: discord.Interaction, category: str = "balance"):
+    async def leaderboard(self, interaction: discord.Interaction):
         if not await self._check_commands_channel(interaction):
             return
 
         async with aiosqlite.connect(DB_PATH) as db:
-            if category == "balance":
-                async with db.execute("SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10") as cursor:
-                    top_users = await cursor.fetchall()
-                    title = "Top verdieners"
-                    unit = "coins"
-            else:
-                async with db.execute("SELECT user_id, level FROM users ORDER BY level DESC, xp DESC LIMIT 10") as cursor:
-                    top_users = await cursor.fetchall()
-                    title = "Top explorers"
-                    unit = "Level"
+            async with db.execute("SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10") as cursor:
+                top_users = await cursor.fetchall()
+                title = "Top verdieners"
+                unit = "coins"
 
         if not top_users:
             return await interaction.response.send_message(embed=discord.Embed(description="Nog geen gebruikers in de leaderboard.", color=discord.Color.red()))

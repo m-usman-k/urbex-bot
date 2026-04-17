@@ -10,8 +10,6 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 balance INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 1,
-                xp INTEGER DEFAULT 0,
                 total_earned INTEGER DEFAULT 0,
                 last_boost_reward DATE
             )
@@ -106,6 +104,26 @@ async def init_db():
             )
         ''')
         
+        # Activity Logs Table
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log_type TEXT,
+                title TEXT,
+                description TEXT,
+                color INTEGER,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Cleanup Level/XP (Migration) - Drop columns if they exist
+        # SQLite 3.35.0+ supports DROP COLUMN
+        for col in ["level", "xp"]:
+            try:
+                await db.execute(f"ALTER TABLE users DROP COLUMN {col}")
+            except:
+                pass
+
         await db.commit()
 
 async def get_setting(key: str, default: str = None):
@@ -130,50 +148,10 @@ async def get_user_balance(user_id: int):
                 await db.commit()
                 return 0
 
-async def add_xp(user_id: int, xp_amount: int):
-    """Adds XP to a user, handles scaling level-ups, and grants coin rewards."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT xp, level, balance FROM users WHERE user_id = ?", (user_id,)) as cursor:
-            row = await cursor.fetchone()
-            if not row:
-                await db.execute("INSERT INTO users (user_id, xp, level) VALUES (?, ?, ?)", (user_id, xp_amount, 1))
-                await db.commit()
-                return None # No level up
-            
-            current_xp = row[0] or 0
-            current_level = row[1] or 1
-            current_balance = row[2] or 0
-            
-            new_xp = current_xp + xp_amount
-            new_level = current_level
-            total_rewards = 0
-            
-            # Leveling formula: Each level requires more XP than the last
-            # Level 1 -> 2: 150 XP
-            # Level 2 -> 3: 250 XP
-            while True:
-                xp_needed = (new_level * 100) + 50
-                if new_xp >= xp_needed:
-                    new_xp -= xp_needed
-                    new_level += 1
-                else:
-                    break
-            
-            if new_level > current_level:
-                await db.execute("UPDATE users SET xp = ?, level = ? WHERE user_id = ?", 
-                                 (new_xp, new_level, user_id))
-                await db.commit()
-                return {"new_level": new_level, "reward": 0}
-            
-            await db.execute("UPDATE users SET xp = ?, level = ? WHERE user_id = ?", (new_xp, new_level, user_id))
-            await db.commit()
-            return None
-            return None
-
 async def get_user_stats(user_id: int):
-    """Returns a dictionary of user stats including level, xp, and approved submissions."""
+    """Returns a dictionary of user stats including balance and approved submissions."""
     async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT balance, level, xp, total_earned FROM users WHERE user_id = ?", (user_id,)) as cursor:
+        async with db.execute("SELECT balance, total_earned FROM users WHERE user_id = ?", (user_id,)) as cursor:
             user_row = await cursor.fetchone()
         
         async with db.execute("SELECT COUNT(*) FROM submissions WHERE user_id = ? AND status = 'approved'", (user_id,)) as cursor:
@@ -184,9 +162,7 @@ async def get_user_stats(user_id: int):
             
         return {
             "balance": user_row[0],
-            "level": user_row[1],
-            "xp": user_row[2],
-            "total_earned": user_row[3],
+            "total_earned": user_row[1],
             "submissions": subs_row[0] if subs_row else 0
         }
 
