@@ -168,6 +168,58 @@ class SubmissionApprovalView(ui.LayoutView):
                         (posted.jump_url, sub['submission_id']),
                     )
                     await db.commit()
+        
+        # Post approved update publicly
+        elif sub_type == 'update':
+            update_channel_id = await get_setting('update_panel_channel')
+            update_channel = interaction.guild.get_channel(int(update_channel_id)) if update_channel_id else None
+            
+            if isinstance(update_channel, discord.TextChannel):
+                mention = user.mention if user else f"<@{user_id}>"
+                
+                # Format update content
+                extra_info = sub['coordinates'] or "Geen"
+                map_val = sub['map_category'] or "Niet opgegeven"
+                update_type = sub['content'] or "Onbekend"
+                
+                pub_content = (
+                    f"👤 **Update door:** {mention}\n\n"
+                    f"**Locatie:** {location_id}\n"
+                    f"**Map:** {map_val}\n\n"
+                    f"**{update_type}**\n"
+                    f"**Extra info:** {extra_info}\n\n"
+                    f"**Foto's hieronder**"
+                )
+
+                # Extracts the existing MediaGallery directly from the Admin layout view
+                gallery_cmp = None
+                admin_view = ui.LayoutView.from_message(interaction.message)
+                for item in admin_view.children:
+                    if item.type == discord.ComponentType.container:
+                        for child in getattr(item, 'children', []):
+                            if child.type == discord.ComponentType.media_gallery:
+                                gallery_cmp = child
+                                break
+                
+                pub_view = ui.LayoutView(timeout=None)
+                text_disp = ui.TextDisplay(content=pub_content)
+                
+                if gallery_cmp:
+                    container = ui.Container(text_disp, gallery_cmp, accent_colour=discord.Color.orange())
+                else:
+                    container = ui.Container(text_disp, accent_colour=discord.Color.orange())
+                    
+                pub_view.add_item(container)
+
+                posted = await update_channel.send(view=pub_view)
+                await refresh_update_sticky(interaction.guild)
+
+                async with aiosqlite.connect(DB_PATH) as db:
+                    await db.execute(
+                        "UPDATE submissions SET submission_message_link = ? WHERE submission_id = ?",
+                        (posted.jump_url, sub['submission_id']),
+                    )
+                    await db.commit()
 
         # Update the button message in-place natively
         # Use from_message to perfectly preserve dynamically added containers
