@@ -33,6 +33,10 @@ class HelpDropdown(ui.Select):
             boost_init = int(os.getenv('COINS_NITRO_INITIAL', 100))
             boost_month = int(os.getenv('COINS_NITRO_MONTHLY', 100))
 
+            act_coins = int(os.getenv('COINS_ACTIVITY', 2))
+            act_xp = int(os.getenv('XP_ACTIVITY', 5))
+            act_int = int(os.getenv('ACTIVITY_INTERVAL_MINUTES', 60))
+
             embed = discord.Embed(
                 title="🪙 Hoe kan ik verdienen?",
                 description="Hieronder vind je de verschillende manieren om coins te verdienen in de community.",
@@ -42,7 +46,7 @@ class HelpDropdown(ui.Select):
             embed.add_field(name="⭐ Reviews", value=f"Verdien **{review} coins** per goedgekeurde review.", inline=False)
             embed.add_field(name="📍 Updates", value=f"Verdien **{update} coins** voor elke goedgekeurde locatie update.", inline=False)
             embed.add_field(name="🚀 Server Boosting", value=f"Verdien **{boost_init} coins** bij het starten van een boost en **{boost_month} coins** per maand!", inline=False)
-            embed.add_field(name="✨ Activiteit", value="Verdien XP door actief te zijn en stijg in het `/leaderboard`!", inline=False)
+            embed.add_field(name="✨ Activiteit", value=f"Verdien **{act_coins} coins** en **{act_xp} XP** per **{act_int} minuten** door actief te zijn in de chat!", inline=False)
             
             embed.set_footer(text="The Urbex Factory | Economy System", icon_url=self.bot.user.display_avatar.url)
             return await interaction.response.edit_message(embed=embed, view=self.view)

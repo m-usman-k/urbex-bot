@@ -86,7 +86,12 @@ class Economy(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
+        import os
         now = datetime.now()
+        coins_reward = int(os.getenv('COINS_ACTIVITY', 2))
+        xp_reward = int(os.getenv('XP_ACTIVITY', 5))
+        interval = int(os.getenv('ACTIVITY_INTERVAL_MINUTES', 60))
+
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute("SELECT last_message_reward FROM users WHERE user_id = ?", (message.author.id,)) as cursor:
                 row = await cursor.fetchone()
@@ -94,11 +99,11 @@ class Economy(commands.Cog):
             last_reward = row[0] if row and row[0] else None
             if last_reward:
                 last_reward_dt = datetime.fromisoformat(last_reward)
-                if now - last_reward_dt < timedelta(minutes=30):
+                if now - last_reward_dt < timedelta(minutes=interval):
                     return
 
-            await update_user_balance(message.author.id, 1, "Activiteit beloning (30 min)")
-            await add_xp(message.author.id, 5)
+            await update_user_balance(message.author.id, coins_reward, f"Activiteit beloning ({interval} min)")
+            await add_xp(message.author.id, xp_reward)
             await db.execute(
                 "UPDATE users SET last_message_reward = ? WHERE user_id = ?",
                 (now.isoformat(), message.author.id),
