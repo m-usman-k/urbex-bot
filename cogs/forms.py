@@ -2,7 +2,7 @@ import discord
 from discord import ui, app_commands
 from discord.ext import commands
 import aiosqlite
-from utils.database import DB_PATH, get_setting, update_user_balance, add_xp, get_submission, set_setting
+from utils.database import DB_PATH, get_setting, update_user_balance, get_submission, set_setting
 from utils.logger import log_event
 
 async def prepare_grid(attachments):

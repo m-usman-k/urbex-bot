@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import aiosqlite
 from datetime import datetime, timedelta, timezone
-from utils.database import get_user_balance, update_user_balance, get_user_stats, DB_PATH, get_setting, add_xp
+from utils.database import get_user_balance, update_user_balance, get_user_stats, DB_PATH, get_setting
 
 class HistoryPagination(discord.ui.View):
     def __init__(self, target, bot):
