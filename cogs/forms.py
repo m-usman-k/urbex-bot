@@ -88,13 +88,12 @@ class SubmissionApprovalView(ui.LayoutView):
         sub_type = sub['type']
         location_id = sub['location_id']
 
-        from utils.database import update_user_balance, get_setting
-
+        import os
         # Get the right reward amount based on current settings
         if sub_type == 'review':
-            reward_amt = int(await get_setting('reward_review') or 20)
+            reward_amt = int(os.getenv('COINS_REVIEW', 25))
         else:
-            reward_amt = int(await get_setting('reward_update') or 5)
+            reward_amt = int(os.getenv('COINS_UPDATE', 5))
 
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
@@ -504,17 +503,10 @@ class UpdatePanelView(ui.View):
 
 async def send_review_panel(channel: discord.TextChannel):
     content = (
-        "**Laat een review achter 👇**\n"
+        "Laat een review achter 👇\n"
         "Klik op de knop hieronder en deel jouw ervaring met deze locatie.\n\n"
         "Je review wordt automatisch in dit kanaal geplaatst.\n\n"
-        "**Beoordeling:**\n"
-        "⭐ **Toegankelijkheid:**\n\n"
-        "1⭐ = slecht bereikbaar\n"
-        "5⭐ = goed toegankelijk\n\n"
-        "⭐ **Kwaliteit:**\n\n"
-        "1⭐ = slecht\n"
-        "5⭐ = topkwaliteit\n\n"
-        "👇 **Klik hier om je review te plaatsen**"
+        "👇 Klik hier om je review te plaatsen"
     )
     view = ReviewPanelView()
     message = await channel.send(content=content, view=view)

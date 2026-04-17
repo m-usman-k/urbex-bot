@@ -27,11 +27,11 @@ class HelpDropdown(ui.Select):
             return await interaction.response.edit_message(embed=create_main_help_embed(self.bot), view=self.view)
 
         if self.values[0] == "Earnings":
-            daily = await get_setting('reward_daily') or 10
-            review = await get_setting('reward_review') or 50
-            update = await get_setting('reward_update') or 20
-            boost_init = await get_setting('reward_boost_initial') or 500
-            boost_month = await get_setting('reward_boost_monthly') or 200
+            daily = int(os.getenv('COINS_DAILY', 10))
+            review = int(os.getenv('COINS_REVIEW', 25))
+            update = int(os.getenv('COINS_UPDATE', 5))
+            boost_init = int(os.getenv('COINS_NITRO_INITIAL', 100))
+            boost_month = int(os.getenv('COINS_NITRO_MONTHLY', 100))
 
             embed = discord.Embed(
                 title="🪙 Hoe kan ik verdienen?",

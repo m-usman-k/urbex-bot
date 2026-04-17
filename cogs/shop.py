@@ -19,12 +19,14 @@ def is_shop_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
 
 def build_shop_panel_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="Urbex Shop",
+        title="🏪 Urbex Shop",
         description=(
-            "Klik op de knop hieronder om je claim-ticket te openen.\n"
-            "Staff helpt je daar handmatig met je claim."
+            "Gebruik je coins om exclusieve rewards te claimen.\n\n"
+            "💰 Check je saldo\n"
+            "🎁 Bekijk rewards\n"
+            "🎟️ Claim reward"
         ),
-        color=discord.Color.green(),
+        color=discord.Color.from_rgb(43, 45, 49),
     )
     embed.set_footer(text="The Urbex Factory")
     return embed
@@ -41,8 +43,6 @@ async def create_or_get_shop_ticket(interaction: discord.Interaction) -> tuple[d
         return None, False
 
     category = panel_channel.category
-    if not category:
-        return None, False
 
     existing_ticket = discord.utils.get(
         interaction.guild.text_channels,
@@ -154,25 +154,27 @@ class ShopTicketControlView(ui.View):
         )
         await interaction.response.send_message(embed=embed, view=ConfirmDeleteView(), ephemeral=True)
 
+# -------------------- Shop UI Components --------------------
 
-class ShopPanelView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+class RewardSelectDropdown(ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder="Welk reward wil je claimen?", min_values=1, max_values=1, options=options, custom_id="reward_select_dropdown")
 
-    @ui.button(label="Open Shop", style=discord.ButtonStyle.primary, custom_id="panel_open_shop")
-    async def open_shop(self, interaction: discord.Interaction, button: ui.Button):
+    async def callback(self, interaction: discord.Interaction):
+        reward_selected = self.values[0]
         ticket_channel, created = await create_or_get_shop_ticket(interaction)
         if not ticket_channel:
             return await interaction.response.send_message(
-                "Shop panel kanaal is niet goed ingesteld. Run `/setup_shop_panel` opnieuw in het juiste kanaal.",
-                ephemeral=True,
+                "❌ Shop panel kanaal is niet goed ingesteld. Ticket kon niet gemaakt worden.",
+                ephemeral=True
             )
+            
         if created:
             opener_embed = discord.Embed(
-                title="Shop Ticket",
+                title="🎟️ Reward Claim Ticket",
                 description=(
-                    "Je ticket is geopend.\n"
-                    "Beschrijf hier wat je wilt claimen, staff helpt je handmatig verder."
+                    f"Je ticket is geopend voor het claimen van: **{reward_selected}**\n\n"
+                    "Staff zal zo snel mogelijk contact met je opnemen om je verificatie en aankoop af te ronden."
                 ),
                 color=discord.Color.green(),
             )
@@ -181,16 +183,133 @@ class ShopPanelView(ui.View):
                 embed=opener_embed,
                 view=ShopTicketControlView(),
             )
+            await interaction.response.edit_message(content=f"✅ Je shop ticket is aangemaakt: {ticket_channel.mention}", view=None, embed=None)
+            
             await log_event(
                 interaction.client,
                 'shop',
-                "Shop Ticket Created",
-                f"**User**: {interaction.user.mention}\n**Channel**: {ticket_channel.mention}",
+                "Shop Claim Ticket Created",
+                f"**User**: {interaction.user.mention}\n**Channel**: {ticket_channel.mention}\n**Reward**: {reward_selected}",
                 color=discord.Color.blue(),
             )
-            return await interaction.response.send_message(f"Je shop ticket is aangemaakt: {ticket_channel.mention}", ephemeral=True)
+        else:
+            await ticket_channel.send(f"{interaction.user.mention} wil nog een reward eraan toevoegen: **{reward_selected}**")
+            await interaction.response.edit_message(content=f"✅ Je hebt al een open shop ticket: {ticket_channel.mention}. Je verzoek is daaraan toegevoegd.", view=None, embed=None)
 
-        await interaction.response.send_message(f"Je hebt al een open shop ticket: {ticket_channel.mention}", ephemeral=True)
+class RewardSelectView(ui.View):
+    def __init__(self, options):
+        super().__init__(timeout=None)
+        self.add_item(RewardSelectDropdown(options))
+
+class RewardsNavView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @ui.button(label="Claim Reward", emoji="🎟️", style=discord.ButtonStyle.success)
+    async def btn_claim(self, interaction: discord.Interaction, button: ui.Button):
+        import json
+        import os
+        options = []
+        if os.path.exists("rewards.json"):
+            with open("rewards.json", "r", encoding="utf-8") as f:
+                try:
+                    for item in json.load(f):
+                        name = item.get("name", "Unknown")
+                        price = item.get("price", 0)
+                        if len(options) < 25:
+                            options.append(discord.SelectOption(label=name[:100], value=name[:100], description=f"{price} coins"))
+                except Exception:
+                    pass
+        if not options:
+            return await interaction.response.send_message("Er zijn nog geen rewards om te claimen.", ephemeral=True)
+        await interaction.response.send_message("Kies hieronder welk reward je wilt claimen:", view=RewardSelectView(options), ephemeral=True)
+        
+    @ui.button(label="Check je saldo", emoji="💰", style=discord.ButtonStyle.secondary)
+    async def btn_balance(self, interaction: discord.Interaction, button: ui.Button):
+        from utils.database import get_user_balance
+        coins = await get_user_balance(interaction.user.id)
+        embed = discord.Embed(
+            title="💰 Saldo Check",
+            description=f"Je hebt momenteel **`{coins}`** coins beschikbaar om te besteden.",
+            color=discord.Color.gold()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class ShopDropdown(ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Check je saldo", emoji="💰", value="balance", description="Bekijk je huidige hoeveelheid coins."),
+            discord.SelectOption(label="Bekijk rewards", emoji="🎁", value="rewards", description="Bekijk alle beschikbare rewards in de shop."),
+            discord.SelectOption(label="Claim reward", emoji="🎟️", value="claim", description="Open een ticket om iets te claimen.")
+        ]
+        super().__init__(placeholder="Kies een actie...", min_values=1, max_values=1, options=options, custom_id="shop_panel_dropdown")
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+        
+        if choice == "claim":
+            import json
+            import os
+            options = []
+            if os.path.exists("rewards.json"):
+                with open("rewards.json", "r", encoding="utf-8") as f:
+                    try:
+                        for item in json.load(f):
+                            name = item.get("name", "Unknown")
+                            price = item.get("price", 0)
+                            if len(options) < 25:
+                                options.append(discord.SelectOption(label=name[:100], value=name[:100], description=f"{price} coins"))
+                    except Exception:
+                        pass
+            if not options:
+                return await interaction.response.send_message("Er zijn nog geen rewards om te claimen.", ephemeral=True)
+            await interaction.response.send_message("Kies hieronder welk reward je wilt claimen:", view=RewardSelectView(options), ephemeral=True)
+            return
+            
+        await interaction.response.defer(ephemeral=True)
+
+        if choice == "balance":
+            from utils.database import get_user_balance
+            coins = await get_user_balance(interaction.user.id)
+            embed = discord.Embed(
+                title="💰 Saldo Check",
+                description=f"Je hebt momenteel **`{coins}`** coins beschikbaar om te besteden.",
+                color=discord.Color.gold()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        elif choice == "rewards":
+            import json
+            import os
+            items_str = ""
+            rewards_file = "rewards.json"
+            if os.path.exists(rewards_file):
+                with open(rewards_file, "r", encoding="utf-8") as f:
+                    try:
+                        rewards = json.load(f)
+                        for item in rewards:
+                            name = item.get("name", "Unknown")
+                            price = item.get("price", 0)
+                            items_str += f"**{name}** — `{price} coins`\n\n"
+                    except Exception:
+                        items_str = "Fout bij laden van rewards."
+                        
+            if not items_str:
+                items_str = "Er zijn momenteel geen rewards beschikbaar in de shop."
+                
+            embed = discord.Embed(
+                title="🎁 Beschikbare Rewards",
+                description=items_str,
+                color=discord.Color.purple()
+            )
+            
+            await interaction.followup.send(embed=embed, view=RewardsNavView(), ephemeral=True)
+
+class ShopPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ShopDropdown())
+
 
 
 class Shop(commands.Cog):
@@ -205,16 +324,26 @@ class Shop(commands.Cog):
         interaction: discord.Interaction,
         name: str,
         price: int,
-        description: str,
-        stock: int = -1,
-        is_physical: bool = False,
     ):
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute(
-                "INSERT INTO shop_items (name, price, description, stock, is_physical) VALUES (?, ?, ?, ?, ?)",
-                (name, price, description, stock, is_physical),
-            )
-            await db.commit()
+        import json
+        import os
+        from utils.logger import log_event
+        
+        rewards_file = "rewards.json"
+        rewards = []
+        if os.path.exists(rewards_file):
+            with open(rewards_file, "r", encoding="utf-8") as f:
+                try:
+                    rewards = json.load(f)
+                except Exception:
+                    pass
+                    
+        rewards.append({"price": price, "name": name})
+        rewards.sort(key=lambda x: x.get('price', 0))
+        
+        with open(rewards_file, "w", encoding="utf-8") as f:
+            json.dump(rewards, f, indent=4)
+            
         embed = discord.Embed(title="Shop Item Added", color=discord.Color.green())
         embed.description = f"Successfully added **`{name}`** to the shop for **`{price}`** coins."
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -223,8 +352,49 @@ class Shop(commands.Cog):
             interaction.client,
             'admin',
             "New Shop Item Added",
-            f"**Admin**: {interaction.user.mention}\n**Item**: {name}\n**Price**: {price}\n**Stock**: {stock}",
+            f"**Admin**: {interaction.user.mention}\n**Item**: {name}\n**Price**: {price}",
             color=discord.Color.blue(),
+        )
+
+    @app_commands.command(name="remove_shop_item", description="Remove an item from the shop by name")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def remove_shop_item(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+    ):
+        import json
+        import os
+        from utils.logger import log_event
+        
+        rewards_file = "rewards.json"
+        rewards = []
+        if os.path.exists(rewards_file):
+            with open(rewards_file, "r", encoding="utf-8") as f:
+                try:
+                    rewards = json.load(f)
+                except Exception:
+                    pass
+                    
+        new_rewards = [r for r in rewards if r.get('name', '').lower() != name.lower()]
+        
+        if len(new_rewards) == len(rewards):
+            return await interaction.response.send_message(f"Item **{name}** niet gevonden in de shop.", ephemeral=True)
+            
+        with open(rewards_file, "w", encoding="utf-8") as f:
+            json.dump(new_rewards, f, indent=4)
+            
+        embed = discord.Embed(title="Shop Item Removed", color=discord.Color.red())
+        embed.description = f"Successfully removed **`{name}`** from the shop."
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        await log_event(
+            interaction.client,
+            'admin',
+            "Shop Item Removed",
+            f"**Admin**: {interaction.user.mention}\n**Item**: {name}",
+            color=discord.Color.red(),
         )
 
     @app_commands.command(name="close_shop_ticket", description="Close current shop ticket")

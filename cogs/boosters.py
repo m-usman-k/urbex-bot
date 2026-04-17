@@ -22,10 +22,8 @@ class Boosters(commands.Cog):
         # Current date for comparison
         today = datetime.now()
         
-        from utils.database import get_setting
-        # Reward amount from settings
-        reward_val = await get_setting('reward_boost_monthly')
-        reward = int(reward_val) if reward_val is not None else int(os.getenv('COINS_NITRO_MONTHLY', 100))
+        # Reward amount from environment variables
+        reward = int(os.getenv('COINS_NITRO_MONTHLY', 100))
 
         async with aiosqlite.connect(DB_PATH) as db:
             # Fetch all users who are currently boosting any guild the bot is in
@@ -76,10 +74,8 @@ class Boosters(commands.Cog):
         # Detect new boost
         if not before.premium_since and after.premium_since:
             logger.info(f"{after} started boosting!")
-            from utils.database import get_setting
-            # Reward immediately from settings
-            reward_val = await get_setting('reward_boost_initial')
-            reward = int(reward_val) if reward_val is not None else int(os.getenv('COINS_NITRO_INITIAL', 100))
+            # Reward immediately from environment variables
+            reward = int(os.getenv('COINS_NITRO_INITIAL', 100))
             await update_user_balance(after.id, reward, "Initial Nitro Boost Reward")
             try:
                 embed_dm = discord.Embed(title="Thanks for Boosting!", color=discord.Color.purple())

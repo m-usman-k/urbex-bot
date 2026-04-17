@@ -572,11 +572,12 @@ class Admin(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def setup_shop_panel(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
+        await interaction.response.defer(ephemeral=True)
         target_channel = channel or interaction.channel
         await set_setting("shop_panel_channel", target_channel.id)
         from cogs.shop import send_shop_panel
         await send_shop_panel(target_channel)
-        await interaction.response.send_message(f"Shop panel sent to {target_channel.mention}!", ephemeral=True)
+        await interaction.followup.send(f"Shop panel sent to {target_channel.mention}!", ephemeral=True)
 
     @app_commands.command(name="bot_setup_guide", description="Show complete admin setup and operation guide")
     @app_commands.default_permissions(administrator=True)

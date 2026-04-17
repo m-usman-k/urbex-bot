@@ -158,11 +158,8 @@ class Economy(commands.Cog):
                     color=discord.Color.red()
                 ), ephemeral=True)
         
-        reward = await get_setting('reward_daily')
-        if reward is None:
-            reward = 2
-        else:
-            reward = int(reward)
+        import os
+        reward = int(os.getenv('COINS_DAILY', 10))
             
         new_balance = await update_user_balance(user_id, reward, "Daily Reward")
         
