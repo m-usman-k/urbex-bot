@@ -54,13 +54,19 @@ async def init_db():
         ]
         
         for col_name, col_type in columns_to_add:
+            # Check for submissions table
             try:
                 await db.execute(f"ALTER TABLE submissions ADD COLUMN {col_name} {col_type}")
-            except:
+                print(f"DEBUG: Added column {col_name} to submissions table.")
+            except Exception as e:
+                # This usually means the column already exists
                 pass
+            
+            # Check for users table
             try:
                 await db.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
-            except:
+                print(f"DEBUG: Added column {col_name} to users table.")
+            except Exception as e:
                 pass
         
         # Shop Items Table
