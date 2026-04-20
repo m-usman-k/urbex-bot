@@ -20,7 +20,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS submissions (
                 submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
-                type TEXT, -- 'review', 'update', 'verification'
+                type TEXT, -- 'review', 'update', 'video', 'verification'
                 status TEXT, -- 'pending', 'approved', 'rejected'
                 location_id TEXT,
                 location_name TEXT,
@@ -31,6 +31,7 @@ async def init_db():
                 name_change TEXT,
                 map_category TEXT,
                 content TEXT,
+                video_link TEXT,
                 submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -48,7 +49,8 @@ async def init_db():
             ("last_message_reward", "TEXT"),
             ("submission_message_link", "TEXT"),
             ("admin_grid_message_id", "TEXT"),
-            ("admin_button_message_id", "TEXT")
+            ("admin_button_message_id", "TEXT"),
+            ("video_link", "TEXT")
         ]
         
         for col_name, col_type in columns_to_add:

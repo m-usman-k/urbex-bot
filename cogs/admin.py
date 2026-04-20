@@ -30,6 +30,7 @@ class SetupGuideDropdown(discord.ui.Select):
             discord.SelectOption(label="Core Channels", description="Configure all required channels", emoji="🧭"),
             discord.SelectOption(label="Reviews System", description="Configure native review form flow", emoji="📝"),
             discord.SelectOption(label="Updates System", description="Configure location update flow", emoji="📍"),
+            discord.SelectOption(label="Videos System", description="Configure video submission flow", emoji="🎬"),
             discord.SelectOption(label="Shop System", description="Configure shop panel, items, and claim threads", emoji="🛒"),
             discord.SelectOption(label="Rewards and Economy", description="Configure coin rewards and economy controls", emoji="💰"),
             discord.SelectOption(label="Validation Checklist", description="End-to-end test checklist after setup", emoji="✅"),
@@ -75,6 +76,7 @@ class SetupGuideDropdown(discord.ui.Select):
                     "`updates_channel`: Where approved location updates are posted.\n"
                     "`review_panel_channel`: Native form intake for reviews.\n"
                     "`update_panel_channel`: Native form intake for updates.\n"
+                    "`video_panel_channel`: Native form intake for videos.\n"
                     "`shop_panel_channel`: Defines where the shop panel lives and which category tickets use."
                 ),
                 inline=False,
@@ -84,8 +86,8 @@ class SetupGuideDropdown(discord.ui.Select):
                 value=(
                     "Use `/set_commands_channel` for command usage channel.\n"
                     "Use `/set_approval_channel` for staff review queue.\n"
-                    "Use `/set_log_channel` for custom logging routing.\n"
-                    "Use `/setup_review_public` and `/setup_update_public` for the high-fidelity panels.\n"
+                    "Use `/log_event` (internal) or `/set_log_channel` for custom logging routing.\n"
+                    "Use `/setup_review_public`, `/setup_update_public`, and `/setup_video_public` for the high-fidelity panels.\n"
                     "Use `/setup_shop_panel` in the channel whose category should receive shop tickets."
                 ),
                 inline=False,
@@ -129,6 +131,27 @@ class SetupGuideDropdown(discord.ui.Select):
                 name="Approvals",
                 value=(
                     "3. Run `/setup_update_admin channel:#admin-channel` to set where staff review the queue."
+                ),
+                inline=False,
+            )
+            return await interaction.response.edit_message(embed=embed, view=self.view)
+
+        if selected == "Videos System":
+            embed = discord.Embed(title="Setup: Videos System", color=discord.Color.brand_red())
+            embed.description = "The video submission system allows users to submit WeTransfer links for coins."
+            embed.add_field(
+                name="Premium Video Wizard",
+                value=(
+                    "1. Go to your public videos channel.\n"
+                    "2. Run `/setup_video_public channel:#channel-name`.\n"
+                    "**Result**: The bot posts a persistent embed with a 'Video's Doorsturen' button."
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Approvals",
+                value=(
+                    "3. Run `/setup_video_admin channel:#admin-channel` to set where staff review video submissions."
                 ),
                 inline=False,
             )
@@ -178,7 +201,7 @@ class SetupGuideDropdown(discord.ui.Select):
                 name="Reward Configuration",
                 value=(
                     "Use `/set_reward` to set:\n"
-                    "`reward_daily`, `reward_review`, `reward_update`, `reward_boost_initial`, `reward_boost_monthly`."
+                    "`reward_daily`, `reward_review`, `reward_update`, `reward_video`, `reward_boost_initial`, `reward_boost_monthly`."
                 ),
                 inline=False,
             )
@@ -205,7 +228,7 @@ class SetupGuideDropdown(discord.ui.Select):
             name="Checklist",
             value=(
                 "1. `/help` shows admin tools only to admins.\n"
-                "2. Review and update panel buttons open in their own channels.\n"
+                "2. Review, update, and video panel buttons open correctly.\n"
                 "3. Review and update posts appear in configured separate channels.\n"
                 "4. Approval buttons in `approval_channel` grant coins correctly.\n"
                 "5. Shop panel opens and displays latest items.\n"
@@ -474,6 +497,7 @@ class Admin(commands.Cog):
         app_commands.Choice(name="Daily Login", value="reward_daily"),
         app_commands.Choice(name="Review Submission", value="reward_review"),
         app_commands.Choice(name="Update Submission", value="reward_update"),
+        app_commands.Choice(name="Video Submission", value="reward_video"),
         app_commands.Choice(name="Initial Boost", value="reward_boost_initial"),
         app_commands.Choice(name="Monthly Boost", value="reward_boost_monthly")
     ])
@@ -566,6 +590,42 @@ class Admin(commands.Cog):
         embed.description = f"New **location update** submissions will now be queued for approval in {channel.mention}."
         await interaction.response.send_message(embed=embed, ephemeral=True)
         await log_event(self.bot, 'admin', "Update Admin Channel Set", f"{interaction.user.mention} set the update approval channel to {channel.mention}.")
+
+    @app_commands.command(name="setup_video_public", description="Automated setup of a read-only public video submission channel")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def setup_video_public(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Sets channel permissions to read-only for users and posts video panel."""
+        await interaction.response.defer(ephemeral=True)
+        
+        # 1. Update Permissions
+        overwrites = channel.overwrites
+        overwrites[interaction.guild.default_role] = discord.PermissionOverwrite(send_messages=False, read_messages=True, add_reactions=True)
+        overwrites[interaction.guild.me] = discord.PermissionOverwrite(send_messages=True, manage_messages=True, read_messages=True, embed_links=True, attach_files=True)
+        
+        try:
+            await channel.edit(overwrites=overwrites)
+            
+            # 2. Configure Settings
+            await set_setting("video_panel_channel", channel.id)
+            
+            # 3. Send Initial Sticky
+            from cogs.forms import refresh_video_sticky
+            await refresh_video_sticky(interaction.guild)
+            
+            await interaction.followup.send(f"✅ {channel.mention} has been configured as your **Public Videos** channel.\n- Permissions locked (read-only for users).\n- Video submission panel posted.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Failed to configure channel: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="setup_video_admin", description="Set the private admin channel where video submissions are queued for approval")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def setup_video_admin(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        await set_setting("video_approval_channel", channel.id)
+        embed = discord.Embed(title="Video Admin Channel Set", color=discord.Color.brand_red())
+        embed.description = f"New **video** submissions will now be queued for approval in {channel.mention}."
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await log_event(self.bot, 'admin', "Video Admin Channel Set", f"{interaction.user.mention} set the video approval channel to {channel.mention}.")
 
     @app_commands.command(name="set_commands_channel", description="Set the channel where users are allowed to use economy/general commands")
     @app_commands.describe(channel="The channel for user commands")

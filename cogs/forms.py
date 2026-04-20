@@ -92,6 +92,8 @@ class SubmissionApprovalView(ui.LayoutView):
         # Get the right reward amount based on current settings
         if sub_type == 'review':
             reward_amt = int(os.getenv('COINS_REVIEW', 25))
+        elif sub_type == 'video':
+            reward_amt = int(os.getenv('COINS_VIDEO', 100))
         else:
             reward_amt = int(os.getenv('COINS_UPDATE', 5))
 
@@ -171,55 +173,15 @@ class SubmissionApprovalView(ui.LayoutView):
         
         # Post approved update publicly
         elif sub_type == 'update':
-            update_channel_id = await get_setting('update_panel_channel')
-            update_channel = interaction.guild.get_channel(int(update_channel_id)) if update_channel_id else None
-            
-            if isinstance(update_channel, discord.TextChannel):
-                mention = user.mention if user else f"<@{user_id}>"
-                
-                # Format update content
-                extra_info = sub['coordinates'] or "Geen"
-                map_val = sub['map_category'] or "Niet opgegeven"
-                update_type = sub['content'] or "Onbekend"
-                
-                pub_content = (
-                    f"👤 **Update door:** {mention}\n\n"
-                    f"**Locatie:** {location_id}\n"
-                    f"**Map:** {map_val}\n\n"
-                    f"**{update_type}**\n"
-                    f"**Extra info:** {extra_info}\n\n"
-                    f"**Foto's hieronder**"
-                )
-
-                # Extracts the existing MediaGallery directly from the Admin layout view
-                gallery_cmp = None
-                admin_view = ui.LayoutView.from_message(interaction.message)
-                for item in admin_view.children:
-                    if item.type == discord.ComponentType.container:
-                        for child in getattr(item, 'children', []):
-                            if child.type == discord.ComponentType.media_gallery:
-                                gallery_cmp = child
-                                break
-                
-                pub_view = ui.LayoutView(timeout=None)
-                text_disp = ui.TextDisplay(content=pub_content)
-                
-                if gallery_cmp:
-                    container = ui.Container(text_disp, gallery_cmp, accent_colour=discord.Color.orange())
-                else:
-                    container = ui.Container(text_disp, accent_colour=discord.Color.orange())
-                    
-                pub_view.add_item(container)
-
-                posted = await update_channel.send(view=pub_view)
-                await refresh_update_sticky(interaction.guild)
-
-                async with aiosqlite.connect(DB_PATH) as db:
-                    await db.execute(
-                        "UPDATE submissions SET submission_message_link = ? WHERE submission_id = ?",
-                        (posted.jump_url, sub['submission_id']),
-                    )
-                    await db.commit()
+            # Removed public update posting per user request.
+            # Only saving the admin/evidence link is needed.
+            pass
+        
+        # Post approved video publicly
+        elif sub_type == 'video':
+            # Like updates, we may not need to post videos publicly if they are for internal social use
+            # but user said "Like the updates", and updates are not posted publicly anymore.
+            pass
 
         # Update the button message in-place natively
         # Use from_message to perfectly preserve dynamically added containers
@@ -436,6 +398,14 @@ class ReviewModal(ui.Modal, title="Laat een review achter"):
             # MUST explicitly pass files=discord_files so Discord can upload them
             btn_msg = await admin_ch.send(view=view, files=discord_files)
 
+            # Store the admin message link (evidence link) in the database
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    "UPDATE submissions SET submission_message_link = ? WHERE submission_id = ?",
+                    (btn_msg.jump_url, sub_id)
+                )
+                await db.commit()
+
         await interaction.followup.send(
             "✅ Bedankt! Je review is verstuurd naar de admins ter beoordeling.", ephemeral=True
         )
@@ -526,8 +496,92 @@ class UpdateModal(ui.Modal, title="Geef een update door!"):
             # MUST explicitly pass files=discord_files so Discord can upload them
             btn_msg = await admin_channel.send(view=view, files=discord_files)
 
+            # Store the admin message link (evidence link) in the database
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    "UPDATE submissions SET submission_message_link = ? WHERE submission_id = ?",
+                    (btn_msg.jump_url, sub_id)
+                )
+                await db.commit()
+
         await interaction.followup.send(
             "✅ Bedankt! Je update is verstuurd naar de admins.", ephemeral=True
+        )
+
+# -------------------- Native Video Modal (discord.py 2.7+) --------------------
+
+class VideoModal(ui.Modal, title="Urbex video's doorgeven"):
+    def __init__(self):
+        super().__init__()
+        
+        self.loc_input = ui.TextInput(
+            label="Locatie Naam:",
+            placeholder="Bijv. \"#00001\" en/of \"Ancient Disco [BEL]\"",
+            min_length=2,
+            required=True
+        )
+        self.add_item(self.loc_input)
+
+        self.video_link_input = ui.TextInput(
+            label="Link naar Beelden:",
+            placeholder="Bijv. via https://www.wetransfer.com/",
+            style=discord.TextStyle.paragraph,
+            required=True
+        )
+        self.add_item(self.video_link_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        loc = self.loc_input.value
+        video_link = self.video_link_input.value
+
+        # Store in database
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                '''INSERT INTO submissions (user_id, type, status, location_id, location_name, video_link)
+                   VALUES (?, 'video', 'pending', ?, ?, ?)''',
+                (interaction.user.id, loc, loc, video_link)
+            )
+            sub_id = cursor.lastrowid
+            await db.commit()
+
+        # Admin channel (videos use their own dedicated key)
+        approval_channel_id = await get_setting('video_approval_channel')
+        admin_channel = interaction.guild.get_channel(int(approval_channel_id)) if approval_channel_id else None
+
+        if admin_channel:
+            desc = (
+                f"**Locatie Naam:**\n{loc}\n\n"
+                f"**Link naar Beelden:**\n{video_link}"
+            )
+
+            # Unified Native UI Container
+            view = SubmissionApprovalView()
+            
+            text_disp = ui.TextDisplay(
+                content=f"📋 **Submission ID:** {sub_id}\n👤 **Ingediend door:** {interaction.user.mention}\n📎 **Type:** Video Submission\n\n{desc}"
+            )
+            
+            container = ui.Container(text_disp, accent_colour=discord.Color.brand_red())
+                
+            # Reorder container above persistent buttons
+            view.remove_item(view.action_row)
+            view.add_item(container)
+            view.add_item(view.action_row)
+
+            btn_msg = await admin_channel.send(view=view)
+
+            # Store the admin message link (evidence link) in the database
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    "UPDATE submissions SET submission_message_link = ? WHERE submission_id = ?",
+                    (btn_msg.jump_url, sub_id)
+                )
+                await db.commit()
+
+        await interaction.followup.send(
+            "✅ Bedankt! Je video's zijn verstuurd naar de admins ter beoordeling.", ephemeral=True
         )
 
 # -------------------- Panel Views --------------------
@@ -547,6 +601,14 @@ class UpdatePanelView(ui.View):
     @ui.button(label="Updates Doorgeven", style=discord.ButtonStyle.primary, custom_id="panel_update_location")
     async def update_location(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(UpdateModal())
+
+class VideoPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @ui.button(label="Video's Doorsturen", style=discord.ButtonStyle.primary, custom_id="panel_submit_video")
+    async def submit_video(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(VideoModal())
 
 # -------------------- Sticky Panel Helpers --------------------
 
@@ -617,6 +679,41 @@ async def send_update_panel(channel: discord.abc.Messageable):
     embed.set_footer(text="The Urbex Factory")
     await channel.send(embed=embed, view=UpdatePanelView())
 
+async def send_video_panel(channel: discord.TextChannel):
+    embed = discord.Embed(
+        title="🎬 Jouw Urbex-video’s gezocht!",
+        description=(
+            "🏘️💥\n"
+            "Heb jij toffe **urbex-video’s** liggen van één en dezelfde locatie? Deel ze met ons en help mee om onze socials 🔥 te maken!\n\n"
+            "🎁 **Wat krijg je van ons?**\n"
+            "Voor elke locatie met **minimaal 8 video’s** ontvang je **100 coins**\n"
+            "**Per locatie!** Dus hoe meer locaties, hoe meer rewards! 💸\n\n"
+            "Je krijgt altijd duidelijke credits voor gebruik op onze socials!\n\n"
+            "⚡ We bekijken elke inzending handmatig – je hoort snel van ons!"
+        ),
+        color=discord.Color.brand_red()
+    )
+    view = VideoPanelView()
+    message = await channel.send(embed=embed, view=view)
+    await set_setting("video_panel_sticky_id", str(message.id))
+    await set_setting("video_panel_channel", str(channel.id))
+
+async def refresh_video_sticky(guild: discord.Guild):
+    channel_id = await get_setting("video_panel_channel")
+    if not channel_id:
+        return
+    channel = guild.get_channel(int(channel_id))
+    if not isinstance(channel, discord.TextChannel):
+        return
+    old_msg_id = await get_setting("video_panel_sticky_id")
+    if old_msg_id:
+        try:
+            old_msg = await channel.fetch_message(int(old_msg_id))
+            await old_msg.delete()
+        except Exception:
+            pass
+    await send_video_panel(channel)
+
 # -------------------- Cog --------------------
 
 class Forms(commands.Cog):
@@ -638,8 +735,14 @@ class Forms(commands.Cog):
         if update_ch_id and message.channel.id == int(update_ch_id):
             await refresh_update_sticky(message.guild)
 
+        # Check for video panel sticky
+        video_ch_id = await get_setting("video_panel_channel")
+        if video_ch_id and message.channel.id == int(video_ch_id):
+            await refresh_video_sticky(message.guild)
+
 async def setup(bot):
     bot.add_view(ReviewPanelView())
     bot.add_view(UpdatePanelView())
+    bot.add_view(VideoPanelView())
     bot.add_view(SubmissionApprovalView())
     await bot.add_cog(Forms(bot))
